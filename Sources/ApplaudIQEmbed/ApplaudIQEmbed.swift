@@ -19,6 +19,8 @@ import WebKit
 public enum ApplaudIQEmbed {
     public struct Config {
         public let key: String
+        /// The portal origin. Must be HTTPS (http is accepted only for localhost in DEBUG); a
+        /// non-secure origin is refused at load time and surfaces `onError("insecure_base_url")`.
         public let baseURL: URL
         public init(key: String, baseURL: URL = URL(string: "https://recognize.applaudiq.com")!) {
             self.key = key
@@ -66,17 +68,34 @@ final class EmbedViewController: UIViewController, WKScriptMessageHandler, WKNav
 
     override func viewDidLoad() {
         super.viewDidLoad()
+
+        // Refuse an insecure portal origin: the one-time token and the session cookies must
+        // never travel over cleartext. HTTPS is required; plain http is tolerated only for a
+        // localhost dev portal in DEBUG builds. (On web the browser/CSP enforce this; on iOS
+        // we must.)
+        guard isPortalURL(config.baseURL) else {
+            options.onError?("insecure_base_url")
+            return
+        }
+
         let contentController = WKUserContentController()
         contentController.add(self, name: "applaudiq")
 
         let cfg = WKWebViewConfiguration()
         cfg.userContentController = contentController
+        // Isolate the embedded session: a non-persistent store keeps the portal's cookies in
+        // memory for this view only — nothing lands on disk or bleeds into other app web views,
+        // and the session is gone when the embed is dismissed. Auto-login mints a fresh token
+        // each open and manual re-authenticates, so persistence would buy nothing and cost
+        // isolation.
+        cfg.websiteDataStore = .nonPersistent()
         // Native bridge: the embedded portal's postToHost() delivers messages via
         // `window.ReactNativeWebView.postMessage(JSON.stringify(...))`, so provide that
         // shim and forward it to our WKScriptMessageHandler. A plain WKWebView is a
         // top-level context (window.parent === window) with no real parent, so the web
         // SDK's `window.parent.postMessage` path is a no-op here — the RN shim is the
-        // supported native path (same as the React Native SDK).
+        // supported native path (same as the React Native SDK). Main frame only: a sub-frame
+        // the portal might load must not be handed a native bridge.
         let bridge = """
         (function(){
           window.ReactNativeWebView = window.ReactNativeWebView || {
@@ -87,13 +106,24 @@ final class EmbedViewController: UIViewController, WKScriptMessageHandler, WKNav
         })();
         """
         cfg.userContentController.addUserScript(
-            WKUserScript(source: bridge, injectionTime: .atDocumentStart, forMainFrameOnly: false))
+            WKUserScript(source: bridge, injectionTime: .atDocumentStart, forMainFrameOnly: true))
 
         webView = WKWebView(frame: view.bounds, configuration: cfg)
         webView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         webView.navigationDelegate = self
         view.addSubview(webView)
         webView.load(URLRequest(url: embedURL()))
+    }
+
+    /// True when `url` is the trusted portal origin we may load and stay on: the same host as the
+    /// configured `baseURL`, over HTTPS (or http://localhost in DEBUG for a dev portal).
+    private func isPortalURL(_ url: URL) -> Bool {
+        guard let host = url.host, host == config.baseURL.host else { return false }
+        if url.scheme == "https" { return true }
+        #if DEBUG
+        if url.scheme == "http", host == "localhost" || host == "127.0.0.1" { return true }
+        #endif
+        return false
     }
 
     /// Build `<baseURL>/embed?mode=…[&env=test]&k=…` — the page reads `mode` (auto vs
@@ -109,10 +139,41 @@ final class EmbedViewController: UIViewController, WKScriptMessageHandler, WKNav
         return comps?.url ?? base
     }
 
+    // MARK: navigation confinement (WKNavigationDelegate)
+    // A native web view has no frame-ancestors CSP, so we pin it to the portal origin ourselves:
+    // only same-host secure navigations load in place; everything else (other origins, custom
+    // schemes, http) is cancelled and handed to the system browser. This stops an open redirect
+    // or an in-page link from moving the authenticated session — and the native message bridge —
+    // onto an attacker-controlled page.
+    func webView(
+        _ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
+        decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
+    ) {
+        guard let url = navigationAction.request.url else {
+            decisionHandler(.allow)
+            return
+        }
+        if url.scheme == "about" || isPortalURL(url) {
+            decisionHandler(.allow)
+            return
+        }
+        decisionHandler(.cancel)
+        if url.scheme == "https" || url.scheme == "http" {
+            UIApplication.shared.open(url)
+        }
+    }
+
     // MARK: bridge embed → native
     func userContentController(
         _ uc: WKUserContentController, didReceive message: WKScriptMessage
     ) {
+        // Only the main frame, served from the portal origin, may drive the native bridge — a
+        // sub-frame (embedded third-party content) or a navigated-away page must not be able to
+        // spoof the handshake or trigger SSO / close.
+        guard message.frameInfo.isMainFrame,
+            message.frameInfo.securityOrigin.host == config.baseURL.host
+        else { return }
+
         // postToHost() sends a JSON string (via the ReactNativeWebView shim); parse it.
         // Fall back to a dictionary body in case a host delivers an object directly.
         let body: [String: Any]?
@@ -161,11 +222,15 @@ final class EmbedViewController: UIViewController, WKScriptMessageHandler, WKNav
     }
 
     private func sendToEmbed(_ type: String, _ payload: [String: Any]) {
+        // Pass the message as a bound `arguments` value rather than interpolating JSON into JS
+        // source, so the token can never break out of (or inject into) the evaluated script.
         let msg: [String: Any] = ["source": "applaudiq-sdk", "type": type, "payload": payload]
-        guard let data = try? JSONSerialization.data(withJSONObject: msg),
-            let json = String(data: data, encoding: .utf8) else { return }
-        webView.evaluateJavaScript(
-            "window.dispatchEvent(new MessageEvent('message',{data:\(json),origin:location.origin}))")
+        webView.callAsyncJavaScript(
+            "window.dispatchEvent(new MessageEvent('message', { data: msg, origin: location.origin }));",
+            arguments: ["msg": msg],
+            in: nil,
+            in: .page,
+            completionHandler: nil)
     }
 
     // MARK: SSO via system browser
@@ -187,6 +252,9 @@ final class EmbedViewController: UIViewController, WKScriptMessageHandler, WKNav
             self.completeSSO(code: code)
         }
         session.presentationContextProvider = self
+        // Non-ephemeral: reuse the system browser's existing IdP session for one-tap SSO. The
+        // trade-off is the SSO identity persists in Safari beyond the app — flip to true to force
+        // a fresh, isolated sign-in each time.
         session.prefersEphemeralWebBrowserSession = false
         authSession = session
         session.start()
@@ -196,22 +264,22 @@ final class EmbedViewController: UIViewController, WKScriptMessageHandler, WKNav
     // session cookies land in the WKWebView's own cookie store — a URLSession call
     // wouldn't share them — then reload so the authenticated portal renders.
     private func completeSSO(code: String) {
-        let safe = code.replacingOccurrences(of: "\\", with: "\\\\")
-            .replacingOccurrences(of: "\"", with: "\\\"")
+        // The code is passed as a bound `arguments` value (not interpolated into the script), so
+        // it can't inject into the evaluated JS. callAsyncJavaScript surfaces a failed exchange
+        // as a thrown error → `.failure`, which we relay to the host directly.
         let js = """
-        fetch('/api/v1/employee/auth/sso/exchange', {
+        const r = await fetch('/api/v1/employee/auth/sso/exchange', {
           method: 'POST', credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ code: "\(safe)" })
-        }).then(function(r){
-          if (!r.ok) throw new Error('sso_exchange_failed');
-          window.location.replace('/');
-        }).catch(function(){
-          try { window.webkit.messageHandlers.applaudiq.postMessage(JSON.stringify(
-            { source: 'applaudiq-embed', type: 'applaudiq:error', payload: { message: 'sso_exchange_failed' } })); } catch(e){}
+          body: JSON.stringify({ code: code })
         });
+        if (!r.ok) throw new Error('sso_exchange_failed');
+        window.location.replace('/');
         """
-        webView.evaluateJavaScript(js)
+        webView.callAsyncJavaScript(js, arguments: ["code": code], in: nil, in: .page) {
+            [weak self] result in
+            if case .failure = result { self?.options.onError?("sso_exchange_failed") }
+        }
     }
 
     func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
