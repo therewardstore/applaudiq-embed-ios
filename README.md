@@ -13,7 +13,7 @@ one-time token), present a view controller, and handle a few callbacks.
 
 ### 1. Install
 
-**CocoaPods** — add to your `Podfile`, then `pod install`:
+**CocoaPods** — add to your `Podfile`, then `pod install` ([cocoapods.org/pods/ApplaudIQEmbed](https://cocoapods.org/pods/ApplaudIQEmbed)):
 
 ```ruby
 pod 'ApplaudIQEmbed', '~> 1.0'
