@@ -3,6 +3,22 @@
 All notable changes to ApplaudIQEmbed are documented here. This project follows
 [Semantic Versioning](https://semver.org/).
 
+## [1.0.3]
+
+Native feel + a navigation-confinement fix (no public API change):
+
+- **Fix: sub-frames no longer eject to the system browser.** Navigation confinement now applies to
+  the **main frame only**. Previously every non-portal navigation — including sandboxed sub-frames
+  like Google reCAPTCHA, fonts, and embedded widgets — was cancelled and opened in Safari, which
+  broke reCAPTCHA and gave a jarring "browser" feel. The main frame stays pinned to the portal
+  origin (the actual security control); cross-origin sub-frames can't read the session or move the
+  top frame, so they now load in place.
+- **Native feel:** no link-preview popovers (`allowsLinkPreview = false`), no swipe back/forward
+  navigation gestures, no pinch-zoom, and the long-press context menu (Open / Copy Link / Share) is
+  suppressed — which also stops the authenticated session URL leaking out of the embed. A small
+  injected stylesheet removes the long-press callout / tap-highlight on the portal's own content
+  (form fields stay selectable). Opaque background to avoid a white flash before first paint.
+
 ## [1.0.2]
 
 Maintenance release — **no code or API changes** (the SDK source is identical to 1.0.1).

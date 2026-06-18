@@ -49,7 +49,7 @@ public enum ApplaudIQEmbed {
 }
 
 final class EmbedViewController: UIViewController, WKScriptMessageHandler, WKNavigationDelegate,
-    ASWebAuthenticationPresentationContextProviding
+    WKUIDelegate, ASWebAuthenticationPresentationContextProviding
 {
     private let config: ApplaudIQEmbed.Config
     private let options: ApplaudIQEmbed.Options
@@ -108,9 +108,32 @@ final class EmbedViewController: UIViewController, WKScriptMessageHandler, WKNav
         cfg.userContentController.addUserScript(
             WKUserScript(source: bridge, injectionTime: .atDocumentStart, forMainFrameOnly: true))
 
+        // Native feel: suppress the long-press callout/selection menus (a web "tell") on the
+        // portal's OWN content. Main-frame only, so sub-frames (reCAPTCHA, embedded widgets)
+        // keep their normal behaviour. Form fields stay selectable so typing still works.
+        let nativeFeel = """
+        (function(){
+          var s = document.createElement('style');
+          s.textContent = '*{-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent;}'
+            + ':not(input):not(textarea):not([contenteditable]){-webkit-user-select:none;}';
+          (document.head || document.documentElement).appendChild(s);
+        })();
+        """
+        cfg.userContentController.addUserScript(
+            WKUserScript(source: nativeFeel, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
+
         webView = WKWebView(frame: view.bounds, configuration: cfg)
         webView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         webView.navigationDelegate = self
+        webView.uiDelegate = self
+        // Native feel, not a browser: no link-preview popovers, no swipe back/forward, no
+        // pinch-zoom, and no white flash before first paint.
+        webView.allowsLinkPreview = false
+        webView.allowsBackForwardNavigationGestures = false
+        webView.scrollView.pinchGestureRecognizer?.isEnabled = false
+        webView.isOpaque = true
+        webView.backgroundColor = .systemBackground
+        webView.scrollView.backgroundColor = .systemBackground
         view.addSubview(webView)
         webView.load(URLRequest(url: embedURL()))
     }
@@ -140,16 +163,25 @@ final class EmbedViewController: UIViewController, WKScriptMessageHandler, WKNav
     }
 
     // MARK: navigation confinement (WKNavigationDelegate)
-    // A native web view has no frame-ancestors CSP, so we pin it to the portal origin ourselves:
-    // only same-host secure navigations load in place; everything else (other origins, custom
-    // schemes, http) is cancelled and handed to the system browser. This stops an open redirect
-    // or an in-page link from moving the authenticated session — and the native message bridge —
-    // onto an attacker-controlled page.
+    // A native web view has no frame-ancestors CSP, so we pin the MAIN FRAME to the portal origin
+    // ourselves: only same-host secure top-level navigations load in place; everything else (other
+    // origins, custom schemes, http) is cancelled and handed to the system browser. This stops an
+    // open redirect or an in-page link from moving the authenticated session — and the native
+    // message bridge — onto an attacker-controlled page.
     func webView(
         _ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
         decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
     ) {
         guard let url = navigationAction.request.url else {
+            decisionHandler(.allow)
+            return
+        }
+        // Sub-frames (reCAPTCHA, Google fonts, embedded widgets, analytics) are sandboxed
+        // sub-resources — a cross-origin iframe can't read the portal's cookies/DOM or move the
+        // top frame, so confining them buys no security and would (a) break reCAPTCHA/SSO widgets
+        // and (b) eject them to the system browser, which is exactly the "browser feel" we don't
+        // want. Only the MAIN FRAME is pinned to the portal origin.
+        if !(navigationAction.targetFrame?.isMainFrame ?? true) {
             decisionHandler(.allow)
             return
         }
@@ -161,6 +193,17 @@ final class EmbedViewController: UIViewController, WKScriptMessageHandler, WKNav
         if url.scheme == "https" || url.scheme == "http" {
             UIApplication.shared.open(url)
         }
+    }
+
+    // MARK: native feel (WKUIDelegate)
+    // Suppress the long-press context menu (Open / Copy Link / Share). It's a browser affordance
+    // and would also leak the authenticated session URL out of the embed — so kill it.
+    func webView(
+        _ webView: WKWebView,
+        contextMenuConfigurationForElement elementInfo: WKContextMenuElementInfo,
+        completionHandler: @escaping (UIContextMenuConfiguration?) -> Void
+    ) {
+        completionHandler(nil)
     }
 
     // MARK: bridge embed → native

@@ -22,7 +22,7 @@ pod 'ApplaudIQEmbed', '~> 1.0'
 **Swift Package Manager** — File → Add Packages… (or in `Package.swift`):
 
 ```swift
-.package(url: "https://github.com/therewardstore/applaudiq-embed-ios.git", from: "1.0.2")
+.package(url: "https://github.com/therewardstore/applaudiq-embed-ios.git", from: "1.0.3")
 ```
 
 **Manual** — the SDK is pure Swift with no dependencies:
