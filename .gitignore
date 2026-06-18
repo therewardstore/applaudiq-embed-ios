@@ -1,0 +1,11 @@
+# Swift / Xcode build output
+.build/
+DerivedData/
+*.xcodeproj
+*.xcworkspace
+.swiftpm/
+*.xcuserstate
+Package.resolved
+
+# CocoaPods (consumers' artifacts; not the podspec)
+Pods/
