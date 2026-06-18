@@ -22,7 +22,7 @@ pod 'ApplaudIQEmbed', '~> 1.0'
 **Swift Package Manager** — File → Add Packages… (or in `Package.swift`):
 
 ```swift
-.package(url: "https://github.com/therewardstore/applaudiq-embed-ios.git", from: "1.0.0")
+.package(url: "https://github.com/therewardstore/applaudiq-embed-ios.git", from: "1.0.1")
 ```
 
 **Manual** — the SDK is pure Swift with no dependencies:
@@ -117,7 +117,8 @@ UIViewController *vc = [AIQEmbed makeViewControllerWithKey:@"pk_live_…" baseUR
 
 ## Go-live checklist
 
-- Use a `pk_live_…` key and your production `baseURL` (HTTPS).
+- Use a `pk_live_…` key and your production `baseURL`. **`baseURL` must be HTTPS** — a non-secure origin is
+  refused at load with `onError("insecure_base_url")` (plain `http` is allowed only for `localhost` in DEBUG).
 - Auto-login: a real server-side mint endpoint (never embed the `aiq_embed_…` secret in the app).
 - SSO returns to the app via the **`applaudiq://`** callback scheme (handled by `ASWebAuthenticationSession`).
 
