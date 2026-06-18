@@ -22,12 +22,12 @@ pod 'ApplaudIQEmbed', '~> 1.0'
 **Swift Package Manager** — File → Add Packages… (or in `Package.swift`):
 
 ```swift
-.package(url: "https://github.com/therewardstore/applaudiq-embed-ios.git", from: "1.0.1")
+.package(url: "https://github.com/therewardstore/applaudiq-embed-ios.git", from: "1.0.2")
 ```
 
 **Manual** — the SDK is pure Swift with no dependencies:
 
-- **Source drop-in:** copy `Sources/ApplaudIQEmbed/` into your Xcode project (check *Copy items if needed* +
+- **Source drop-in:** copy `Sources/ApplaudIQEmbed/` into your Xcode project (check _Copy items if needed_ +
   your app target). Nothing else to link.
 - **Binary (`.xcframework`):** build once and embed it —
   `xcodebuild -create-xcframework -framework <device>.framework -framework <sim>.framework -output ApplaudIQEmbed.xcframework`,
@@ -126,10 +126,10 @@ UIViewController *vc = [AIQEmbed makeViewControllerWithKey:@"pk_live_…" baseUR
 
 ## API
 
-| Language | Entry point |
-|---|---|
-| **Swift** | `ApplaudIQEmbed.makeViewController(config: .init(key:baseURL:), options: .init(mode:token:))` + `onReady`/`onAuthPending`/`onError`/`onClose` on `Options` |
-| **Objective-C** | `[AIQEmbed makeViewControllerWithKey:baseURL:options:]` with `AIQEmbedOptions` (`AIQEmbedMode` = `Auto`/`Manual`) + the same callback blocks |
+| Language        | Entry point                                                                                                                                                |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Swift**       | `ApplaudIQEmbed.makeViewController(config: .init(key:baseURL:), options: .init(mode:token:))` + `onReady`/`onAuthPending`/`onError`/`onClose` on `Options` |
+| **Objective-C** | `[AIQEmbed makeViewControllerWithKey:baseURL:options:]` with `AIQEmbedOptions` (`AIQEmbedMode` = `Auto`/`Manual`) + the same callback blocks               |
 
 `Mode` is `.auto` (uses `token`) or `.manual` (no token). The publishable `key` is required in both modes.
 

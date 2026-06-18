@@ -3,6 +3,13 @@
 All notable changes to ApplaudIQEmbed are documented here. This project follows
 [Semantic Versioning](https://semver.org/).
 
+## [1.0.2]
+
+Maintenance release — **no code or API changes** (the SDK source is identical to 1.0.1).
+
+- Republished to CocoaPods + Swift Package Manager as **1.0.2**.
+- Docs: README install snippets pinned to `1.0.2`; minor formatting cleanup.
+
 ## [1.0.1]
 
 Security hardening (no public API change):
