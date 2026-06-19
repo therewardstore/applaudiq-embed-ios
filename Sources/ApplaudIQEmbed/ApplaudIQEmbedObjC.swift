@@ -51,8 +51,20 @@ public final class AIQEmbed: NSObject {
         baseURL: URL?,
         options: AIQEmbedOptions
     ) -> UIViewController {
-        let config = baseURL.map { ApplaudIQEmbed.Config(key: key, baseURL: $0) }
-            ?? ApplaudIQEmbed.Config(key: key)
+        makeViewController(key: key, baseURL: baseURL, ssoCallback: "applaudiq://sso-callback", options: options)
+    }
+
+    /// As above, but with a per-app SSO callback deep link (`scheme://host`). SSO hands the one-time code
+    /// back to this scheme (sent as `native_redirect`); also register it in your Info.plist
+    /// `CFBundleURLSchemes`. Mirrors `ApplaudIQEmbed.Config(key:baseURL:ssoCallback:)`.
+    @objc public static func makeViewController(
+        key: String,
+        baseURL: URL?,
+        ssoCallback: String,
+        options: AIQEmbedOptions
+    ) -> UIViewController {
+        let config = baseURL.map { ApplaudIQEmbed.Config(key: key, baseURL: $0, ssoCallback: ssoCallback) }
+            ?? ApplaudIQEmbed.Config(key: key, ssoCallback: ssoCallback)
 
         var opts = ApplaudIQEmbed.Options(
             mode: options.mode == .manual ? .manual : .auto,

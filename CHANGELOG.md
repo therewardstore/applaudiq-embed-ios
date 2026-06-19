@@ -3,6 +3,23 @@
 All notable changes to ApplaudIQEmbed are documented here. This project follows
 [Semantic Versioning](https://semver.org/).
 
+## [1.0.5]
+
+Per-app SSO callback scheme, `native_redirect`, and SSO failure handling (parity with the Android SDK).
+
+- **New: `Config.ssoCallback`** (and `AIQEmbed.makeViewController(key:baseURL:ssoCallback:options:)` for Objective-C).
+  The app's SSO callback deep link (`scheme://host`, default `applaudiq://sso-callback`). SSO now sends it to the
+  backend as **`native_redirect`**, so each app uses its OWN scheme instead of the brand-wide `applaudiq://` — two
+  Applaud IQ apps on one device won't collide on the callback. Also register the scheme in your Info.plist
+  `CFBundleURLSchemes`.
+- **Fix: SSO failures are now surfaced.** The callback can return `?code=` (success) **or** `?error=` (failure /
+  identity mismatch). Previously an `?error=` callback was silently dropped; now the SDK fires `onError(message)` and
+  reloads the portal login so the user lands on a clean retry screen.
+- **New: `Config.backNavigation`** (default `true`) — enables the WKWebView left-edge back-swipe so the gesture
+  steps back through the embed's in-app history. Set `false` to keep the platform default (swipe disabled).
+- **Internal:** the URL-building + callback-parsing logic was extracted into a unit-tested `EmbedInternals` type
+  (run via `xcodebuild test`). Also dropped the dead `env=test` query param (the portal removed test mode).
+
 ## [1.0.4]
 
 Host-managed sign-out, reliable auto-embed detection, and SSO fixes.

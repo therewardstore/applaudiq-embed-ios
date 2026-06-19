@@ -22,9 +22,24 @@ public enum ApplaudIQEmbed {
         /// The portal origin. Must be HTTPS (http is accepted only for localhost in DEBUG); a
         /// non-secure origin is refused at load time and surfaces `onError("insecure_base_url")`.
         public let baseURL: URL
-        public init(key: String, baseURL: URL = URL(string: "https://recognize.applaudiq.com")!) {
+        /// The app's SSO callback deep link (`scheme://host`). SSO opens in `ASWebAuthenticationSession`
+        /// and the backend hands the one-time code back to THIS scheme (sent as `native_redirect`), so each
+        /// app uses its OWN scheme instead of the brand-wide `applaudiq://` (also register it in your app's
+        /// Info.plist `CFBundleURLSchemes`). Defaults to `applaudiq://sso-callback`.
+        public let ssoCallback: String
+        /// When true (default), the WKWebView's left-edge back-swipe is enabled so the gesture
+        /// traverses the embed's in-app history. Set false to keep the platform default (no swipe).
+        public let backNavigation: Bool
+        public init(
+            key: String,
+            baseURL: URL = URL(string: "https://recognize.applaudiq.com")!,
+            ssoCallback: String = "applaudiq://sso-callback",
+            backNavigation: Bool = true
+        ) {
             self.key = key
             self.baseURL = baseURL
+            self.ssoCallback = ssoCallback
+            self.backNavigation = backNavigation
         }
     }
 
@@ -139,7 +154,7 @@ final class EmbedViewController: UIViewController, WKScriptMessageHandler, WKNav
         // Native feel, not a browser: no link-preview popovers, no swipe back/forward, no
         // pinch-zoom, and no white flash before first paint.
         webView.allowsLinkPreview = false
-        webView.allowsBackForwardNavigationGestures = false
+        webView.allowsBackForwardNavigationGestures = config.backNavigation
         webView.scrollView.pinchGestureRecognizer?.isEnabled = false
         webView.isOpaque = true
         webView.backgroundColor = .systemBackground
@@ -159,17 +174,10 @@ final class EmbedViewController: UIViewController, WKScriptMessageHandler, WKNav
         return false
     }
 
-    /// Build `<baseURL>/embed?mode=…[&env=test]&k=…` — the page reads `mode` (auto vs
-    /// manual → portal login), `env` (the "Test mode" pill), and `k` (the publishable
-    /// key, used server-side for the frame-ancestors allowlist on web).
+    /// `<baseURL>/embed?mode=…&k=…` — the page reads `mode` (auto vs manual → portal login) and `k`
+    /// (the publishable key, used server-side for the frame-ancestors allowlist on web).
     private func embedURL() -> URL {
-        let base = config.baseURL.appendingPathComponent("embed")
-        var comps = URLComponents(url: base, resolvingAgainstBaseURL: false)
-        var items = [URLQueryItem(name: "mode", value: options.mode.rawValue)]
-        if config.key.hasPrefix("pk_test_") { items.append(URLQueryItem(name: "env", value: "test")) }
-        if !config.key.isEmpty { items.append(URLQueryItem(name: "k", value: config.key)) }
-        comps?.queryItems = items
-        return comps?.url ?? base
+        EmbedInternals.embedURL(baseURL: config.baseURL, mode: options.mode.rawValue, key: config.key)
     }
 
     // MARK: navigation confinement (WKNavigationDelegate)
@@ -307,24 +315,26 @@ final class EmbedViewController: UIViewController, WKScriptMessageHandler, WKNav
 
     // MARK: SSO via system browser
     // Google/Microsoft block embedded webviews, so SSO runs in ASWebAuthenticationSession.
-    // `native=1` makes the backend hand the session back as a one-time code on the
-    // `applaudiq://sso-callback` deep link (instead of a web cookie redirect).
+    // `native=1` makes the backend hand the session back as a one-time code on the app's callback deep
+    // link; `native_redirect` tells it WHICH scheme (config.ssoCallback) — so each app uses its own.
     private func startSSO(provider: String, clientID: String? = nil, email: String? = nil) {
-        var comps = URLComponents(
-            url: config.baseURL.appendingPathComponent("api/v1/auth/sso/\(provider)/employee/authorize"),
-            resolvingAgainstBaseURL: false)
-        var items = [URLQueryItem(name: "native", value: "1")]
-        if let clientID, !clientID.isEmpty { items.append(URLQueryItem(name: "client_id", value: clientID)) }
-        if let email, !email.isEmpty { items.append(URLQueryItem(name: "login_hint", value: email)) }
-        comps?.queryItems = items
-        guard let url = comps?.url else { return }
-        let session = ASWebAuthenticationSession(url: url, callbackURLScheme: "applaudiq") {
-            [weak self] callbackURL, _ in
-            guard let self, let cb = callbackURL,
-                let code = URLComponents(url: cb, resolvingAgainstBaseURL: false)?
-                    .queryItems?.first(where: { $0.name == "code" })?.value
-            else { return }
-            self.completeSSO(code: code)
+        guard let url = EmbedInternals.ssoAuthorizeURL(
+            baseURL: config.baseURL, provider: provider, clientID: clientID, email: email,
+            nativeRedirect: config.ssoCallback)
+        else { return }
+        let session = ASWebAuthenticationSession(
+            url: url, callbackURLScheme: EmbedInternals.scheme(ofCallback: config.ssoCallback)
+        ) { [weak self] callbackURL, _ in
+            guard let self, let cb = callbackURL else { return }
+            // The backend returns `…?code=` (success) or `…?error=` (failure / identity mismatch).
+            if let code = EmbedInternals.parseCode(from: cb) {
+                self.completeSSO(code: code)
+            } else {
+                // Surface the error and reload the portal login so the user lands on a clean retry
+                // screen instead of a stuck web view (parity with the Android SDK's failure branch).
+                self.options.onError?(EmbedInternals.parseError(from: cb) ?? "sso_failed")
+                self.webView.load(URLRequest(url: self.embedURL()))
+            }
         }
         session.presentationContextProvider = self
         // Non-ephemeral: reuse the system browser's existing IdP session for one-tap SSO. The

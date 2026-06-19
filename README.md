@@ -22,7 +22,7 @@ pod 'ApplaudIQEmbed', '~> 1.0'
 **Swift Package Manager** — File → Add Packages… (or in `Package.swift`):
 
 ```swift
-.package(url: "https://github.com/therewardstore/applaudiq-embed-ios.git", from: "1.0.4")
+.package(url: "https://github.com/therewardstore/applaudiq-embed-ios.git", from: "1.0.5")
 ```
 
 **Manual** — the SDK is pure Swift with no dependencies:
@@ -83,7 +83,9 @@ options.onError       = { message in /* sign-in failed */ }
 options.onClose       = { /* embed dismissed */ }
 
 let vc = ApplaudIQEmbed.makeViewController(
-    config: .init(key: "pk_live_…"),   // baseURL defaults to https://recognize.applaudiq.com
+    // baseURL defaults to https://recognize.applaudiq.com.
+    // ssoCallback is YOUR app's scheme (also register it in Info.plist CFBundleURLSchemes) — default applaudiq://sso-callback.
+    config: .init(key: "pk_live_…", ssoCallback: "myapp://sso-callback"),
     options: options
 )
 present(vc, animated: true)
@@ -108,6 +110,18 @@ UIViewController *vc = [AIQEmbed makeViewControllerWithKey:@"pk_live_…" baseUR
 `onError(message)` (bad/expired key or token, blocked load — offer a retry) · `onClose` (embed dismissed) ·
 `onSignOut` (the user signed out of an **auto** / host-managed embed — tear down your app's session).
 
+### Config options
+
+`Config(key:baseURL:ssoCallback:backNavigation:)`:
+
+- **`ssoCallback`** — your app's SSO deep link (`scheme://host`, default `applaudiq://sso-callback`); also register
+  the scheme in your Info.plist `CFBundleURLSchemes`.
+- **`backNavigation`** — default **`true`**: the WKWebView's left-edge back-swipe is enabled so the gesture steps
+  back through the embed's in-app history. Set `false` to keep the platform default (no swipe):
+  ```swift
+  config: .init(key: "pk_live_…", backNavigation: false)
+  ```
+
 ---
 
 ## Test integration
@@ -122,7 +136,10 @@ UIViewController *vc = [AIQEmbed makeViewControllerWithKey:@"pk_live_…" baseUR
 - Use a `pk_live_…` key and your production `baseURL`. **`baseURL` must be HTTPS** — a non-secure origin is
   refused at load with `onError("insecure_base_url")` (plain `http` is allowed only for `localhost` in DEBUG).
 - Auto-login: a real server-side mint endpoint (never embed the `aiq_embed_…` secret in the app).
-- SSO returns to the app via the **`applaudiq://`** callback scheme (handled by `ASWebAuthenticationSession`).
+- **SSO callback scheme:** SSO runs in `ASWebAuthenticationSession` and the backend hands the one-time code back to
+  your `Config.ssoCallback` deep link (sent as `native_redirect`). Use your **own** `scheme://host` (default
+  `applaudiq://sso-callback`) and register the scheme in your app's **Info.plist `CFBundleURLSchemes`** — so two
+  Applaud IQ apps on one device don't collide. An SSO failure (`?error=`) fires `onError(message)` and reloads the login.
 
 ---
 
@@ -130,8 +147,8 @@ UIViewController *vc = [AIQEmbed makeViewControllerWithKey:@"pk_live_…" baseUR
 
 | Language        | Entry point                                                                                                                                                |
 | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Swift**       | `ApplaudIQEmbed.makeViewController(config: .init(key:baseURL:), options: .init(mode:token:))` + `onReady`/`onAuthPending`/`onError`/`onClose`/`onSignOut` on `Options` |
-| **Objective-C** | `[AIQEmbed makeViewControllerWithKey:baseURL:options:]` with `AIQEmbedOptions` (`AIQEmbedMode` = `Auto`/`Manual`) + the same callback blocks               |
+| **Swift**       | `ApplaudIQEmbed.makeViewController(config: .init(key:baseURL:ssoCallback:), options: .init(mode:token:))` + `onReady`/`onAuthPending`/`onError`/`onClose`/`onSignOut` on `Options` |
+| **Objective-C** | `[AIQEmbed makeViewControllerWithKey:baseURL:ssoCallback:options:]` with `AIQEmbedOptions` (`AIQEmbedMode` = `Auto`/`Manual`) + the same callback blocks    |
 
 `Mode` is `.auto` (uses `token`) or `.manual` (no token). The publishable `key` is required in both modes.
 

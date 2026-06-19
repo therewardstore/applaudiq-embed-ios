@@ -8,6 +8,13 @@ let package = Package(
         .library(name: "ApplaudIQEmbed", targets: ["ApplaudIQEmbed"])
     ],
     targets: [
-        .target(name: "ApplaudIQEmbed", path: "Sources/ApplaudIQEmbed")
+        .target(name: "ApplaudIQEmbed", path: "Sources/ApplaudIQEmbed"),
+        // iOS-only package (imports UIKit/WebKit) — run via:
+        //   xcodebuild test -scheme ApplaudIQEmbed -destination 'platform=iOS Simulator,name=iPhone 16'
+        .testTarget(
+            name: "ApplaudIQEmbedTests",
+            dependencies: ["ApplaudIQEmbed"],
+            path: "Tests/ApplaudIQEmbedTests"
+        ),
     ]
 )
