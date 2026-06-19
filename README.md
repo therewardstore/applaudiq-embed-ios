@@ -22,7 +22,7 @@ pod 'ApplaudIQEmbed', '~> 1.0'
 **Swift Package Manager** — File → Add Packages… (or in `Package.swift`):
 
 ```swift
-.package(url: "https://github.com/therewardstore/applaudiq-embed-ios.git", from: "1.0.3")
+.package(url: "https://github.com/therewardstore/applaudiq-embed-ios.git", from: "1.0.4")
 ```
 
 **Manual** — the SDK is pure Swift with no dependencies:
@@ -96,6 +96,7 @@ options.onReady       = ^{ /* signed in, feed shown */ };
 options.onAuthPending = ^{ /* signed in, awaiting HR approval */ };
 options.onError       = ^(NSString *message) { /* sign-in failed */ };
 options.onClose       = ^{ /* embed dismissed */ };
+options.onSignOut     = ^{ /* user signed out of an auto embed — tear down your session */ };
 
 UIViewController *vc = [AIQEmbed makeViewControllerWithKey:@"pk_live_…" baseURL:nil options:options];
 [self presentViewController:vc animated:YES completion:nil];
@@ -104,7 +105,8 @@ UIViewController *vc = [AIQEmbed makeViewControllerWithKey:@"pk_live_…" baseUR
 ### 5. Handle callbacks
 
 `onReady` (signed in & shown) · `onAuthPending` (signed in, awaiting HR approval — show a pending state) ·
-`onError(message)` (bad/expired key or token, blocked load — offer a retry) · `onClose` (embed dismissed).
+`onError(message)` (bad/expired key or token, blocked load — offer a retry) · `onClose` (embed dismissed) ·
+`onSignOut` (the user signed out of an **auto** / host-managed embed — tear down your app's session).
 
 ---
 
@@ -128,7 +130,7 @@ UIViewController *vc = [AIQEmbed makeViewControllerWithKey:@"pk_live_…" baseUR
 
 | Language        | Entry point                                                                                                                                                |
 | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Swift**       | `ApplaudIQEmbed.makeViewController(config: .init(key:baseURL:), options: .init(mode:token:))` + `onReady`/`onAuthPending`/`onError`/`onClose` on `Options` |
+| **Swift**       | `ApplaudIQEmbed.makeViewController(config: .init(key:baseURL:), options: .init(mode:token:))` + `onReady`/`onAuthPending`/`onError`/`onClose`/`onSignOut` on `Options` |
 | **Objective-C** | `[AIQEmbed makeViewControllerWithKey:baseURL:options:]` with `AIQEmbedOptions` (`AIQEmbedMode` = `Auto`/`Manual`) + the same callback blocks               |
 
 `Mode` is `.auto` (uses `token`) or `.manual` (no token). The publishable `key` is required in both modes.

@@ -27,6 +27,9 @@ public final class AIQEmbedOptions: NSObject {
     @objc public var onAuthPending: (() -> Void)?
     @objc public var onError: ((String) -> Void)?
     @objc public var onClose: (() -> Void)?
+    /// Fires when the user signs out from inside an auto (host-managed) embed,
+    /// so the partner app can tear the embed down. See `Options.onSignOut`.
+    @objc public var onSignOut: (() -> Void)?
 
     @objc public init(mode: AIQEmbedMode, token: String?) {
         self.mode = mode
@@ -59,6 +62,7 @@ public final class AIQEmbed: NSObject {
         opts.onAuthPending = options.onAuthPending
         opts.onError = options.onError
         opts.onClose = options.onClose
+        opts.onSignOut = options.onSignOut
 
         return ApplaudIQEmbed.makeViewController(config: config, options: opts)
     }

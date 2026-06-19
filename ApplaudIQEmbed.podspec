@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name             = 'ApplaudIQEmbed'
-  s.version          = '1.0.3'
+  s.version          = '1.0.4'
   s.summary          = 'Embed the Applaud IQ recognition portal in a native iOS app.'
   s.description      = <<-DESC
     ApplaudIQEmbed renders the Applaud IQ recognition portal in a WKWebView with auto

@@ -37,6 +37,9 @@ public enum ApplaudIQEmbed {
         public var onClose: (() -> Void)?
         public var onError: ((String) -> Void)?
         public var onAuthPending: (() -> Void)?
+        /// Fires when the user signs out from inside an auto (host-managed) embed. The host owns the
+        /// session, so it should tear down its own auth here (the embed is dismissed automatically).
+        public var onSignOut: (() -> Void)?
         public init(mode: Mode = .auto, token: String? = nil) {
             self.mode = mode
             self.token = token
@@ -57,6 +60,7 @@ final class EmbedViewController: UIViewController, WKScriptMessageHandler, WKNav
     private var authSession: ASWebAuthenticationSession?
     private var tokenSent = false
     private var readyFired = false
+    private var initErrorFired = false
 
     init(config: ApplaudIQEmbed.Config, options: ApplaudIQEmbed.Options) {
         self.config = config
@@ -96,6 +100,11 @@ final class EmbedViewController: UIViewController, WKScriptMessageHandler, WKNav
         // SDK's `window.parent.postMessage` path is a no-op here — the RN shim is the
         // supported native path (same as the React Native SDK). Main frame only: a sub-frame
         // the portal might load must not be handed a native bridge.
+        // Also expose the embed mode + native flag on EVERY main-frame load. The portal reads
+        // `window.__APPLAUDIQ_EMBED__` (see embedAuth.ts) to know it's an auto vs manual native
+        // embed even on pages downstream of /embed (e.g. the dashboard), where sessionStorage may
+        // not have survived the navigation — so e.g. the dashboard correctly HIDES "Sign Out" in an
+        // auto embed (the host owns the session).
         let bridge = """
         (function(){
           window.ReactNativeWebView = window.ReactNativeWebView || {
@@ -103,6 +112,7 @@ final class EmbedViewController: UIViewController, WKScriptMessageHandler, WKNav
               try { window.webkit.messageHandlers.applaudiq.postMessage(s); } catch(e){}
             }
           };
+          window.__APPLAUDIQ_EMBED__ = { mode: "\(options.mode.rawValue)", native: true };
         })();
         """
         cfg.userContentController.addUserScript(
@@ -235,9 +245,11 @@ final class EmbedViewController: UIViewController, WKScriptMessageHandler, WKNav
                 if let token = options.token, !tokenSent {
                     tokenSent = true
                     sendToEmbed("applaudiq:init-token", ["token": token])
-                } else if options.token == nil {
+                } else if options.token == nil, !initErrorFired {
                     // Auto with no token can never sign in — tell the embed to stop
-                    // spinning (show its error screen) and surface it to the host.
+                    // spinning (show its error screen) and surface it to the host. Guard
+                    // so a repeated `ready` (e.g. a reload) doesn't fire onError twice.
+                    initErrorFired = true
                     sendToEmbed("applaudiq:init-error", [:])
                     options.onError?("missing_token")
                 }
@@ -251,9 +263,26 @@ final class EmbedViewController: UIViewController, WKScriptMessageHandler, WKNav
         case "applaudiq:error":
             options.onError?(((body["payload"] as? [String: Any])?["message"] as? String) ?? "error")
         case "applaudiq:close": dismiss(animated: true) { self.options.onClose?() }
+        case "applaudiq:signout":
+            // Host-managed (auto) embed: the user signed out from inside the portal. Tell the host
+            // so it can tear down its own session, and dismiss the embed.
+            dismiss(animated: true) { self.options.onSignOut?() }
         case "applaudiq:sso-request":
-            let provider = (body["payload"] as? [String: Any])?["provider"] as? String ?? "google"
-            startSSO(provider: provider)
+            let payload = body["payload"] as? [String: Any]
+            // Whitelist the provider — never interpolate an arbitrary, embed-supplied string into the
+            // authorize path (parity with the web SDK). Unknown values fall back to google.
+            let rawProvider = (payload?["provider"] as? String ?? "google").lowercased()
+            let provider = ["google", "microsoft"].contains(rawProvider) ? rawProvider : "google"
+            // The portal resolved the tenant from the email at identify; the backend authorize
+            // endpoint requires this client_id (it rejects the request otherwise). The clientId may
+            // arrive as a JSON number or string depending on the host; accept both. email → login_hint.
+            let clientID: String? = {
+                if let n = payload?["clientId"] as? NSNumber { return n.stringValue }
+                if let s = payload?["clientId"] as? String, !s.isEmpty { return s }
+                return nil
+            }()
+            let email = payload?["email"] as? String
+            startSSO(provider: provider, clientID: clientID, email: email)
         default: break
         }
     }
@@ -280,11 +309,14 @@ final class EmbedViewController: UIViewController, WKScriptMessageHandler, WKNav
     // Google/Microsoft block embedded webviews, so SSO runs in ASWebAuthenticationSession.
     // `native=1` makes the backend hand the session back as a one-time code on the
     // `applaudiq://sso-callback` deep link (instead of a web cookie redirect).
-    private func startSSO(provider: String) {
+    private func startSSO(provider: String, clientID: String? = nil, email: String? = nil) {
         var comps = URLComponents(
             url: config.baseURL.appendingPathComponent("api/v1/auth/sso/\(provider)/employee/authorize"),
             resolvingAgainstBaseURL: false)
-        comps?.queryItems = [URLQueryItem(name: "native", value: "1")]
+        var items = [URLQueryItem(name: "native", value: "1")]
+        if let clientID, !clientID.isEmpty { items.append(URLQueryItem(name: "client_id", value: clientID)) }
+        if let email, !email.isEmpty { items.append(URLQueryItem(name: "login_hint", value: email)) }
+        comps?.queryItems = items
         guard let url = comps?.url else { return }
         let session = ASWebAuthenticationSession(url: url, callbackURLScheme: "applaudiq") {
             [weak self] callbackURL, _ in
@@ -299,6 +331,9 @@ final class EmbedViewController: UIViewController, WKScriptMessageHandler, WKNav
         // trade-off is the SSO identity persists in Safari beyond the app — flip to true to force
         // a fresh, isolated sign-in each time.
         session.prefersEphemeralWebBrowserSession = false
+        // Cancel any in-flight session (e.g. a rapid re-tap) before replacing it, so we never
+        // leave an orphaned ASWebAuthenticationSession running.
+        authSession?.cancel()
         authSession = session
         session.start()
     }
