@@ -16,13 +16,13 @@ one-time token), present a view controller, and handle a few callbacks.
 **CocoaPods** — add to your `Podfile`, then `pod install` ([cocoapods.org/pods/ApplaudIQEmbed](https://cocoapods.org/pods/ApplaudIQEmbed)):
 
 ```ruby
-pod 'ApplaudIQEmbed', '~> 1.0'
+pod 'ApplaudIQEmbed', '~> 1.1'
 ```
 
 **Swift Package Manager** — File → Add Packages… (or in `Package.swift`):
 
 ```swift
-.package(url: "https://github.com/therewardstore/applaudiq-embed-ios.git", from: "1.0.5")
+.package(url: "https://github.com/therewardstore/applaudiq-embed-ios.git", from: "1.1.0")
 ```
 
 **Manual** — the SDK is pure Swift with no dependencies:
@@ -153,8 +153,12 @@ UIViewController *vc = [AIQEmbed makeViewControllerWithKey:@"pk_live_…" baseUR
 `Mode` is `.auto` (uses `token`) or `.manual` (no token). The publishable `key` is required in both modes.
 
 A runnable SwiftUI example lives in the
-[applaudiq-sdk-example](https://github.com/therewardstore/applaudiq-sdk-example) repo under
+[applaudiq-sdk-example](https://github.com/therewardstore/applaudiq-sdk-example/tree/master/native-integration/ios) repo under
 `native-integration/ios/`.
+
+## Changelog
+
+Latest: **v1.1.0 (LTS)**. See [CHANGELOG.md](./CHANGELOG.md) for the full release history (also shown on the CocoaPods / Swift Package Index page).
 
 ## License
 
