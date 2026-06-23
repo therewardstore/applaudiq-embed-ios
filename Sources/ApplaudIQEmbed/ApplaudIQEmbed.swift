@@ -180,6 +180,20 @@ final class EmbedViewController: UIViewController, WKScriptMessageHandler, WKNav
         EmbedInternals.embedURL(baseURL: config.baseURL, mode: options.mode.rawValue, key: config.key)
     }
 
+    /// `<baseURL>/embed?mode=…&k=…&sso_error=<message>` — show the SSO failure on the FRAMEABLE embed page,
+    /// which renders the "Authentication Failed" card. (The portal's /sso-callback page is X-Frame-Options: DENY
+    /// so it can't be reused by the Capacitor iframe; all SDKs route SSO errors through the embed page for
+    /// parity.) Falls back to the embed login if the URL can't be built.
+    private func ssoErrorURL(message: String) -> URL {
+        guard var comps = URLComponents(url: embedURL(), resolvingAgainstBaseURL: false) else {
+            return embedURL()
+        }
+        var items = comps.queryItems ?? []
+        items.append(URLQueryItem(name: "sso_error", value: message))
+        comps.queryItems = items
+        return comps.url ?? embedURL()
+    }
+
     // MARK: navigation confinement (WKNavigationDelegate)
     // A native web view has no frame-ancestors CSP, so we pin the MAIN FRAME to the portal origin
     // ourselves: only same-host secure top-level navigations load in place; everything else (other
@@ -330,10 +344,12 @@ final class EmbedViewController: UIViewController, WKScriptMessageHandler, WKNav
             if let code = EmbedInternals.parseCode(from: cb) {
                 self.completeSSO(code: code)
             } else {
-                // Surface the error and reload the portal login so the user lands on a clean retry
-                // screen instead of a stuck web view (parity with the Android SDK's failure branch).
-                self.options.onError?(EmbedInternals.parseError(from: cb) ?? "sso_failed")
-                self.webView.load(URLRequest(url: self.embedURL()))
+                // Surface the error to the host AND show the portal's /sso-callback error page INSIDE the web
+                // view (parity with the web + Capacitor + Android SDKs) so the message is visible; its "Return
+                // to login" goes back to the embed login, instead of silently reloading a clean login form.
+                let msg = EmbedInternals.parseError(from: cb) ?? "sso_failed"
+                self.options.onError?(msg)
+                self.webView.load(URLRequest(url: self.ssoErrorURL(message: msg)))
             }
         }
         session.presentationContextProvider = self

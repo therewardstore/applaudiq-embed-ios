@@ -58,8 +58,11 @@ enum EmbedInternals {
     static func parseError(from url: URL) -> String? { queryValue(from: url, name: "error") }
 
     private static func queryValue(from url: URL, name: String) -> String? {
+        // Query values encode spaces as `+` (form-urlencoding); URLComponents percent-decodes `%20`
+        // but leaves `+` literal, so normalize it or the error message renders with `+` between words.
         let v = URLComponents(url: url, resolvingAgainstBaseURL: false)?
-            .queryItems?.first(where: { $0.name == name })?.value
+            .queryItems?.first(where: { $0.name == name })?.value?
+            .replacingOccurrences(of: "+", with: " ")
         return (v?.isEmpty == false) ? v : nil
     }
 }
