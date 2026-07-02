@@ -305,6 +305,14 @@ final class EmbedViewController: UIViewController, WKScriptMessageHandler, WKNav
             }()
             let email = payload?["email"] as? String
             startSSO(provider: provider, clientID: clientID, email: email)
+        case "applaudiq:open-external":
+            // Reward-store downloads / payment / OAuth: open the URL in the system browser.
+            if let urlStr = (body["payload"] as? [String: Any])?["url"] as? String,
+                let url = URL(string: urlStr),
+                url.scheme == "http" || url.scheme == "https"
+            {
+                UIApplication.shared.open(url)
+            }
         default: break
         }
     }

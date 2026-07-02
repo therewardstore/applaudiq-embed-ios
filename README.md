@@ -16,13 +16,13 @@ one-time token), present a view controller, and handle a few callbacks.
 **CocoaPods** — add to your `Podfile`, then `pod install` ([cocoapods.org/pods/ApplaudIQEmbed](https://cocoapods.org/pods/ApplaudIQEmbed)):
 
 ```ruby
-pod 'ApplaudIQEmbed', '~> 1.1.1'
+pod 'ApplaudIQEmbed', '~> 1.2.0'
 ```
 
 **Swift Package Manager** — File → Add Packages… (or in `Package.swift`):
 
 ```swift
-.package(url: "https://github.com/therewardstore/applaudiq-embed-ios.git", from: "1.1.1")
+.package(url: "https://github.com/therewardstore/applaudiq-embed-ios.git", from: "1.2.0")
 ```
 
 **Manual** — the SDK is pure Swift with no dependencies:
@@ -124,6 +124,15 @@ UIViewController *vc = [AIQEmbed makeViewControllerWithKey:@"pk_live_…" baseUR
 
 ---
 
+## Downloads & external links
+
+When the portal (or the reward store nested inside it) needs to open a URL outside the WebView —
+a file download, a payment page, or an OAuth handoff — it sends the `applaudiq:open-external` bridge
+message with payload `{ url }`. The SDK opens `http(s)` URLs in the **system browser**
+(`UIApplication.shared.open`). No app code is required.
+
+---
+
 ## Test integration
 
 - Run on a simulator. **Manual login works with just the publishable key** — no server needed.
@@ -158,7 +167,7 @@ A runnable SwiftUI example lives in the
 
 ## Changelog
 
-Latest: **v1.1.1 (LTS)**. See [CHANGELOG.md](./CHANGELOG.md) for the full release history (also shown on the CocoaPods / Swift Package Index page).
+Latest: **v1.2.0 (LTS)**. See [CHANGELOG.md](./CHANGELOG.md) for the full release history (also shown on the CocoaPods / Swift Package Index page).
 
 ## License
 
