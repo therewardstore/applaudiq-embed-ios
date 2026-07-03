@@ -313,8 +313,40 @@ final class EmbedViewController: UIViewController, WKScriptMessageHandler, WKNav
             {
                 UIApplication.shared.open(url)
             }
+        case "applaudiq:save-file":
+            // Reward-store voucher download: the embed streamed the file bytes (base64) because a blob
+            // download can't reach disk inside the WebView. Write a temp file + present the share sheet.
+            if let payload = body["payload"] as? [String: Any],
+                let base64 = payload["base64"] as? String, !base64.isEmpty
+            {
+                let rawName = (payload["filename"] as? String) ?? "download"
+                // basename only (strip any path separators the web supplied — no path traversal)
+                let base = rawName.split(whereSeparator: { $0 == "/" || $0 == "\\" })
+                    .last.map(String.init) ?? "download"
+                saveAndShareFile(base64: base64, filename: base.isEmpty ? "download" : base)
+            }
         default: break
         }
+    }
+
+    /// Decode base64 file bytes → temp file → share sheet ("Save to Files" / share targets).
+    /// Best-effort: any decode/write failure is ignored so the host app never crashes.
+    private func saveAndShareFile(base64: String, filename: String) {
+        guard let data = Data(base64Encoded: base64) else { return }
+        let fileURL = FileManager.default.temporaryDirectory.appendingPathComponent(filename)
+        do {
+            try data.write(to: fileURL, options: .atomic)
+        } catch {
+            return
+        }
+        let activityVC = UIActivityViewController(activityItems: [fileURL], applicationActivities: nil)
+        // iPad: a popover with no anchor throws — anchor it to the center of our view.
+        if let pop = activityVC.popoverPresentationController {
+            pop.sourceView = view
+            pop.sourceRect = CGRect(x: view.bounds.midX, y: view.bounds.midY, width: 0, height: 0)
+            pop.permittedArrowDirections = []
+        }
+        present(activityVC, animated: true)
     }
 
     private func fireReady() {

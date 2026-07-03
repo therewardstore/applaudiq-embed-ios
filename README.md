@@ -16,13 +16,13 @@ one-time token), present a view controller, and handle a few callbacks.
 **CocoaPods** — add to your `Podfile`, then `pod install` ([cocoapods.org/pods/ApplaudIQEmbed](https://cocoapods.org/pods/ApplaudIQEmbed)):
 
 ```ruby
-pod 'ApplaudIQEmbed', '~> 1.2.0'
+pod 'ApplaudIQEmbed', '~> 1.3.0'
 ```
 
 **Swift Package Manager** — File → Add Packages… (or in `Package.swift`):
 
 ```swift
-.package(url: "https://github.com/therewardstore/applaudiq-embed-ios.git", from: "1.2.0")
+.package(url: "https://github.com/therewardstore/applaudiq-embed-ios.git", from: "1.3.0")
 ```
 
 **Manual** — the SDK is pure Swift with no dependencies:
@@ -131,6 +131,10 @@ a file download, a payment page, or an OAuth handoff — it sends the `applaudiq
 message with payload `{ url }`. The SDK opens `http(s)` URLs in the **system browser**
 (`UIApplication.shared.open`). No app code is required.
 
+The reward store's **gift-card voucher download** additionally sends `applaudiq:save-file` with
+`{ base64, filename, mime }`. The SDK writes the file to a temp dir and presents a
+`UIActivityViewController` ("Save to Files" / share targets) — no app code required.
+
 ---
 
 ## Test integration
@@ -167,7 +171,7 @@ A runnable SwiftUI example lives in the
 
 ## Changelog
 
-Latest: **v1.2.0 (LTS)**. See [CHANGELOG.md](./CHANGELOG.md) for the full release history (also shown on the CocoaPods / Swift Package Index page).
+Latest: **v1.3.0 (LTS)**. See [CHANGELOG.md](./CHANGELOG.md) for the full release history (also shown on the CocoaPods / Swift Package Index page).
 
 ## License
 
